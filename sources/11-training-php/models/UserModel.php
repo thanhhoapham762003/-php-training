@@ -1,140 +1,98 @@
 <?php
-
 require_once 'BaseModel.php';
 
 class UserModel extends BaseModel {
 
     public function findUserById($id) {
-        $sql = 'SELECT * FROM users WHERE id = '.$id;
-        $user = $this->select($sql);
-
-        return $user;
+        $sql = "SELECT * FROM users WHERE id = ?";
+        $rows = $this->selectPrepared($sql, 'i', [(int)$id]);
+        return $rows;
     }
 
     public function findUser($keyword) {
-        $sql = 'SELECT * FROM users WHERE user_name LIKE %'.$keyword.'%'. ' OR user_email LIKE %'.$keyword.'%';
-        $user = $this->select($sql);
-
-        return $user;
+        $kw = '%' . $keyword . '%';
+        $sql = "SELECT * FROM users WHERE name LIKE ? OR email LIKE ?";
+        $rows = $this->selectPrepared($sql, 'ss', [$kw, $kw]);
+        return $rows;
     }
 
     /**
      * Authentication user
-     * @param $userName
+     * @param $usernameOrEmail
      * @param $password
-     * @return array
+     * @return array|null
      */
-public function auth($usernameOrEmail, $password) {
-        // Convert password sang MD5 (DB bạn dùng MD5)
+    public function auth($usernameOrEmail, $password) {
+        // Nếu DB đang lưu MD5, giữ md5 để tương thích. KHuyến nghị migrate sang password_hash.
         $md5Password = md5($password);
 
-        // Escape dữ liệu
-        $usernameOrEmailEscaped = mysqli_real_escape_string(self::$_connection, $usernameOrEmail);
-        $md5PasswordEscaped = mysqli_real_escape_string(self::$_connection, $md5Password);
-
-        // Query chuẩn theo DB schema
         $sql = "SELECT * FROM users 
-                WHERE (name = '$usernameOrEmailEscaped' OR email = '$usernameOrEmailEscaped') 
-                  AND password = '$md5PasswordEscaped'
+                WHERE (name = ? OR email = ?) 
+                  AND password = ?
                 LIMIT 1";
+        $rows = $this->selectPrepared($sql, 'sss', [$usernameOrEmail, $usernameOrEmail, $md5Password]);
 
-        $result = $this->select($sql);
-
-        if (!empty($result)) {
-            return $result; // Trả về user
+        if (!empty($rows)) {
+            return $rows; // trả mảng user
         }
-
-        return null; // Login failed
+        return null;
     }
 
-
-
-
-
-    /**
-     * Delete user by id
-     * @param $id
-     * @return mixed
-     */
     public function deleteUserById($id) {
-        $sql = 'DELETE FROM users WHERE id = '.$id;
-        return $this->delete($sql);
-
+        $sql = "DELETE FROM users WHERE id = ?";
+        return $this->executePrepared($sql, 'i', [(int)$id]);
     }
 
-    /**
-     * Update user
-     * @param $input
-     * @return mixed
-     */
     public function updateUser($input) {
-        $sql = 'UPDATE users SET 
-                 name = "' . mysqli_real_escape_string(self::$_connection, $input['name']) .'", 
-                 password="'. md5($input['password']) .'"
-                WHERE id = ' . $input['id'];
+        // Expect input contains id, name, fullname, email, maybe password
+        $id = (int)($input['id'] ?? 0);
+        $name = $input['name'] ?? '';
+        $fullname = $input['fullname'] ?? '';
+        $email = $input['email'] ?? '';
 
-        $user = $this->update($sql);
+        if (isset($input['password']) && $input['password'] !== '') {
+            $password = md5($input['password']);
+            $sql = "UPDATE users SET name = ?, fullname = ?, email = ?, password = ? WHERE id = ?";
+            return $this->executePrepared($sql, 'ssssi', [$name, $fullname, $email, $password, $id]);
+        } else {
+            $sql = "UPDATE users SET name = ?, fullname = ?, email = ? WHERE id = ?";
+            return $this->executePrepared($sql, 'sssi', [$name, $fullname, $email, $id]);
+        }
+    }
 
-        return $user;
+    public function insertUser($input) {
+        // Các cột mặc định
+        $defaults = [
+            'name' => 'Unknown',
+            'fullname' => 'Unknown',
+            'email' => 'unknown@example.com',
+            'password' => md5('123456'),
+            'type' => 'user'
+        ];
+
+        $data = array_merge($defaults, $input);
+        // Chuẩn bị và chạy prepared insert
+        $sql = "INSERT INTO users (name, fullname, email, type, password) VALUES (?, ?, ?, ?, ?)";
+        return $this->executePrepared($sql, 'sssss', [
+            $data['name'],
+            $data['fullname'],
+            $data['email'],
+            $data['type'],
+            $data['password']
+        ]);
     }
 
     /**
-     * Insert user
-     * @param $input
-     * @return mixed
-     */
-   public function insertUser($input) {
-    // Các cột bắt buộc với giá trị mặc định
-    $defaults = [
-        'name' => 'Unknown',
-        'fullname' => 'Unknown',
-        'email' => 'unknown@example.com',
-        'password' => md5('123456'),
-        'type' => 'user'
-    ];
-
-    // Chỉ giữ các cột hợp lệ
-    $data = array_merge($defaults, $input);
-    $data = array_intersect_key($data, $defaults); // bỏ các key không tồn tại trong defaults (ví dụ 'submit')
-
-    // Escape dữ liệu và tạo SQL
-    $columns = [];
-    $values = [];
-    foreach ($data as $key => $value) {
-        $columns[] = "`$key`";
-        $values[] = "'" . mysqli_real_escape_string(self::$_connection, $value) . "'";
-    }
-
-    $sql = "INSERT INTO `users` (" . implode(',', $columns) . ") VALUES (" . implode(',', $values) . ")";
-    return $this->insert($sql);
-}
-
-
-
-
-
-    /**
-     * Search users
-     * @param array $params
-     * @return array
+     * Search users (safe)
      */
     public function getUsers($params = []) {
-        //Keyword
         if (!empty($params['keyword'])) {
-            $sql = 'SELECT * FROM users WHERE name LIKE "%' . $params['keyword'] .'%"';
-
-            //Keep this line to use Sql Injection
-            //Don't change
-            //Example keyword: abcef%";TRUNCATE banks;##
-            $users = self::$_connection->multi_query($sql);
-
-            //Get data
-            $users = $this->query($sql);
+            $kw = '%' . $params['keyword'] . '%';
+            $sql = "SELECT * FROM users WHERE name LIKE ? OR fullname LIKE ? OR email LIKE ?";
+            return $this->selectPrepared($sql, 'sss', [$kw, $kw, $kw]);
         } else {
-            $sql = 'SELECT * FROM users';
-            $users = $this->select($sql);
+            $sql = "SELECT * FROM users";
+            return $this->selectPrepared($sql);
         }
-
-        return $users;
     }
 }

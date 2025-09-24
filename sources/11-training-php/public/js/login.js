@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    fetch('view_user.php', {
+    fetch('/view_user.php', {
         headers: {
             'Authorization': 'Bearer ' + sessionId
         }

@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $redis->connect('web-redis', 6379);
 
         $sessionId = bin2hex(random_bytes(16));
-        $redis->setex("session:$sessionId", 3600, json_encode([
+        $redis->setex("$sessionId", 3600, json_encode([
             "id" => $userId,
             "username" => $username
         ]));

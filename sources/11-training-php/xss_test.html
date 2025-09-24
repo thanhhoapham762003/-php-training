@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>XSS Test</title>
+</head>
+<body>
+  <h2>XSS test — create a user with XSS payload in name</h2>
+  <button id="test">Send XSS payload</button>
+  <pre id="result"></pre>
+
+  <script>
+    document.getElementById('test').addEventListener('click', function() {
+      const data = new FormData();
+      // payload that would execute script if not escaped
+      data.append('name', '"><script>alert("XSS")</script>');
+      data.append('fullname', 'XSS Tester');
+      data.append('email', 'xss@test.local');
+      data.append('password', '123456');
+      data.append('type', 'user');
+      data.append('submit', 'submit');
+
+      fetch('/form_user.php', { method: 'POST', body: data })
+        .then(res => res.text())
+        .then(txt => {
+          document.getElementById('result').textContent = 'Response: ' + txt + '\n\nNow open list_users.php and check if script executes. If it does, XSS exists.';
+        })
+        .catch(err => document.getElementById('result').textContent = err);
+    });
+  </script>
+</body>
+</html>

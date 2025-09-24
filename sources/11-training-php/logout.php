@@ -8,7 +8,7 @@ $sessionId = $_COOKIE['sessionId'] ?? null;
 
 if ($sessionId) {
     // Xóa session trong Redis
-    $redis->del("session:$sessionId");
+    $redis->del("$sessionId");
 
     // Xóa cookie trên client
     setcookie('sessionId', '', time() - 3600, '/');
