@@ -1,0 +1,57 @@
+version: "3"
+
+services:
+  web-backend:
+    build: ./config/backend
+    container_name: web-backend
+    ports:
+      - "8080:80"     # backend chạy port 8080
+    volumes:
+      - ./:/var/www/html
+      - ./config/backend/php.ini:/usr/local/etc/php/php.ini
+      - ./config/httpd_security.conf:/etc/apache2/conf-available/security.conf
+    working_dir: /var/www/html
+    environment:
+      APP_ENV: local
+      APACHE_DOCUMENT_ROOT: /var/www/html
+    depends_on:
+      - web-mysql
+      - redis
+    restart: always
+
+  web-mysql:
+    container_name: web-mysql
+    image: "mysql:5.7.43"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: app_web1
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+    restart: always
+
+  web-phpmyadmin:
+    container_name: phpmyadmin
+    image: phpmyadmin/phpmyadmin
+    depends_on:
+      - web-mysql
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: web-mysql
+      MYSQL_ROOT_PASSWORD: pass
+    restart: always
+
+  redis:
+    container_name: web-redis
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  mysql-data:
